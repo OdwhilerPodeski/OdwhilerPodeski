@@ -1,0 +1,74 @@
+plugins {
+    id 'groovy'
+    id 'java-gradle-plugin'
+    id 'maven-publish'
+    id "com.gradle.plugin-publish" version "0.15.0"
+}
+
+ext {
+    pluginId = 'de.obqo.decycle'
+}
+
+sourceCompatibility = 11
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs << "-Xlint:all" << "-Werror"
+}
+
+test {
+    useJUnitPlatform()
+    // we need a deployed library for testing the plugin
+    dependsOn(":decycle-lib:publishLibPublicationToLocalRepository")
+}
+
+task createClasspathManifest {
+    def outputDir = file("$buildDir/classpathManifest")
+    def pluginClasspath = sourceSets.main.runtimeClasspath
+
+    inputs.files pluginClasspath
+    outputs.dir outputDir
+
+    doLast {
+        outputDir.mkdirs()
+        file("$outputDir/plugin-classpath.txt").text = pluginClasspath.join("\n")
+    }
+}
+
+dependencies {
+    compileOnly project(":decycle-lib")
+
+    testImplementation gradleTestKit()
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junitVersion}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junitVersion}"
+    testImplementation "org.assertj:assertj-core:${assertjVersion}"
+    testImplementation "commons-io:commons-io:${commonsioVersion}"
+    testRuntimeOnly files(createClasspathManifest)
+}
+
+processResources {
+    inputs.property("version", version)
+    doLast {
+        file("${buildDir}/resources/main/META-INF/gradle-plugins/${pluginId}.properties") << "tool-version=${version}\n"
+    }
+}
+
+pluginBundle {
+    website = 'https://github.com/obecker/decycle/tree/master/plugin-gradle'
+    vcsUrl = 'https://github.com/obecker/decycle'
+    tags = ['decycle', 'code-quality']
+}
+
+gradlePlugin {
+    plugins {
+        decyclePlugin {
+            id = pluginId
+            displayName = 'Gradle Decycle Plugin'
+            description = 'Gradle plugin that executes decycle dependency checks'
+            implementationClass = 'de.obqo.decycle.gradle.DecyclePlugin'
+        }
+    }
+}
+
+publishPlugins.onlyIf {
+    !version.endsWith("-SNAPSHOT")
+}
